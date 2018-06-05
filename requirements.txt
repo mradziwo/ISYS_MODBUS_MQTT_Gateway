@@ -1,0 +1,3 @@
+paho-mqtt==1.1
+PyYAML==3.11
+pymodbus==1.5.2

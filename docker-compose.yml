@@ -1,0 +1,11 @@
+version: "3"
+services:
+  MODBUS_MQTT_Gateway:
+    image: mradziwo/isys_modbus_mqtt_gateway:latest
+    ports:
+      - "1883:1883"
+    restart: unless-stopped
+    network_mode: bridge
+    volumes:
+      - /home/containers/fma1600/config:/app/config
+
