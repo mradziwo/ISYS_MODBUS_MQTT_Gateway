@@ -75,15 +75,22 @@ def startSubscriptions(names):
         line=datetime.utcnow().strftime('[%Y-%m-%d %H:%M:%S.%f')[:-3]+"]\tSubscribed to: "+Topics[name]
         print (line)
 
+def NotifyBroadcasts(names):
+    for name in names:
+        client.subscribe(Topics[name])
+        line=datetime.utcnow().strftime('[%Y-%m-%d %H:%M:%S.%f')[:-3]+"]\tBroadcasting at: "+Topics[name]
+        print (line)
+
 # The callback for when the client receives a CONNACK response from the server.
 def on_connect(client, userdata, flags, rc):
     line=datetime.utcnow().strftime('[%Y-%m-%d %H:%M:%S.%f')[:-3]+"]\tDevice "+DEVICEName+" connected to MQTT Broker at "+MQTTIP+":"+str(MQTTPort)+" with result code "+str(rc)
     print (line)
-    client.publish(Topics["Status"], "Online" )
-    client.publish(Topics["Version"], str(_version))
+    client.publish(Topics["Status"], "Online" ,retain=True)
+    client.publish(Topics["Version"], str(_version),retain=True)
     # Subscribing in on_connect() means that if we lose the connection and
     # reconnect then subscriptions will be renewed.
-    startSubscriptions(["Read","Write","MaskWrite","Disconnect"])
+    startSubscriptions(["Read","Write","MaskWrite","Disconnect","PWM","KasAwar","DKG"])
+    NotifyBroadcasts(["Version","Status"])
     sys.stdout.flush()
     
 # The callback for when a PUBLISH message is received from the server.
@@ -152,18 +159,35 @@ def Disconnect_callback(client, userdata, message):
     client.publish(Topics["Status"], "Offline" )
     client.disconnect()
 
+def PWM_callback(client, userdata, message):
+    controller.setPWM(int(message.payload))
+    status=controller.readStatus()
+    client.publish(Topics["DataStatus"], json.dumps(status))
+
+def DKG_callback(client, userdata, message):
+    controller.setDKG(int(message.payload))
+    status=controller.readStatus()
+    client.publish(Topics["DataStatus"], json.dumps(status))
+
+def KasAwar_callback(client, userdata, message):
+    controller.setKasAwar(int(message.payload))
+    status=controller.readStatus()
+    client.publish(Topics["DataStatus"], json.dumps(status))
+
 def buildTopics(root, name):
     Topics={}
     base=root+'/'+name+'/'
-    Topics.update({"Status":base+'/Info/Status'})
-    Topics.update({"Version":base+'/Info/Version'})
-    Topics.update({"Disconnect":base+'/Disconnect'})
-    
+    Topics.update({"Status":base+'Info/Status'})
+    Topics.update({"Version":base+'Info/Version'})
+    Topics.update({"Disconnect":base+'Disconnect'})
     Topics.update({"Read":base+"ReadRegisters"})
     Topics.update({"Write":base+"PresetRegister"})
     Topics.update({"MaskWrite":base+"MaskPresetRegister"})
-    Topics.update({"Reply":root+'/Reply'})
-    Topics.update({"DataStatus":root+'/Data/Status'})
+    Topics.update({"Reply":base+'Reply'})
+    Topics.update({"DataStatus":base+'Data/Status'})
+    Topics.update({"PWM":base+'Control/PWM'})
+    Topics.update({"KasAwar":base+'Control/KasAwar'})
+    Topics.update({"DKG":base+'Control/DKG'})
     return (Topics)
     
 def closeAll():
@@ -174,6 +198,8 @@ def closeAll():
     print (datetime.utcnow().strftime('[%Y-%m-%d %H:%M:%S.%f')[:-3]+"]\tProcess stopped")
     sys.stdout.flush()
 
+
+controller=[]
 
 if __name__ == "__main__":
     try:
@@ -232,6 +258,9 @@ if __name__ == "__main__":
     client.message_callback_add(Topics["Write"], Write_callback)
     client.message_callback_add(Topics["MaskWrite"], MaskWrite_callback)
     client.message_callback_add(Topics["Disconnect"], Disconnect_callback)
+    client.message_callback_add(Topics["PWM"], PWM_callback)
+    client.message_callback_add(Topics["DKG"], DKG_callback)
+    client.message_callback_add(Topics["KasAwar"], KasAwar_callback)
 
     try:
         client.connect(MQTTIP, MQTTPort, MQTTKeepAlive)
@@ -254,7 +283,7 @@ if __name__ == "__main__":
         controller.serviceMode(1)
         print (datetime.utcnow().strftime('[%Y-%m-%d %H:%M:%S.%f')[:-3]+"]\tController enterd Service Mode")
     except:
-        print (datetime.utcnow().strftime('[%Y-%m-%d %H:%M:%S.%f')[:-3]+"]\tError while entering ServideMode")
+        print (datetime.utcnow().strftime('[%Y-%m-%d %H:%M:%S.%f')[:-3]+"]\tError while entering ServiceMode")
         closeAll()
         raise
         quit()
