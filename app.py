@@ -7,7 +7,9 @@ from datetime import datetime
 import shutil
 import sys
 import threading
+import ISA010
 
+_version="0.0.1"
 
 class communication:
     
@@ -66,71 +68,22 @@ class RSOverMoxa(communication):
 
 
 
-class FlowMeter:
-    
-    def tare(self):
-        raise NotImplementedError('users must define tare() to use this base class')  
-    def poll(self):
-        raise NotImplementedError('users must define poll() to use this base class') 
-        
-    def start(self, config):
-        raise NotImplementedError('users must define start() to use this base class') 
-        
-    def stop(self):
-        raise NotImplementedError('users must define stop() to use this base class') 
 
-class FMA1600(FlowMeter):
-    
-    mutex = threading.Lock()
-    TareString="A$$V\r".encode()
-    QuerryString="A\r".encode()
-    ReplyLen=42
-    
-    def __init__ (self, channel,config):
-        self._channel=channel()
-        self.start(config)
-    
-    def start(self,config):
-        self._channel.start(config)
-        
-    def stop(self):
-        self._channel.stop()
-        
-    def tare(self):
-        print ("Tare request")  
-        with self.mutex:
-            self._channel.write(self.TareString)
-
-
-    
-    def poll(self):
-        with self.mutex:
-            self._channel.write(self.QuerryString)
-            reply=self._channel.read(self.ReplyLen)
-        w= reply.split(" ")
-        p=0.0689476*float(w[1])
-        t=float(w[2])
-        mq=float(w[4])
-        P=float(w[4])*0.54644058                    #nlpm to kW @CH4 conversion
-        return(p, t, mq, P)
-
-
-
-
+def startSubscriptions(names):
+    for name in names:
+        client.subscribe(Topics[name])
+        line=datetime.utcnow().strftime('[%Y-%m-%d %H:%M:%S.%f')[:-3]+"]\tSubscribed to: "+Topics[name]
+        print (line)
 
 # The callback for when the client receives a CONNACK response from the server.
 def on_connect(client, userdata, flags, rc):
-    line=datetime.utcnow().strftime('[%Y-%m-%d %H:%M:%S.%f')[:-3]+"]\tConnected to "+MQTTIP+":"+str(MQTTPort)+" with result code "+str(rc)
+    line=datetime.utcnow().strftime('[%Y-%m-%d %H:%M:%S.%f')[:-3]+"]\tDevice "+DEVICEName+" connected to MQTT Broker at "+MQTTIP+":"+str(MQTTPort)+" with result code "+str(rc)
     print (line)
-    client.publish(device_root+"/Info/Status", "Online" )
+    client.publish(Topics["Status"], "Online" )
+    client.publish(Topics["Version"], str(_version))
     # Subscribing in on_connect() means that if we lose the connection and
     # reconnect then subscriptions will be renewed.
-    client.subscribe(device_root+"/Tare")
-    line=datetime.utcnow().strftime('[%Y-%m-%d %H:%M:%S.%f')[:-3]+"]\tSubscribed to: "+device_root+"/Tare"
-    print (line)
-    client.subscribe(device_root+"/Disconnect")
-    line=datetime.utcnow().strftime('[%Y-%m-%d %H:%M:%S.%f')[:-3]+"]\tSubscribed to: "+device_root+"/Disconnect"
-    print (line)
+    startSubscriptions(["Read","Write","MaskWrite","Disconnect"])
     sys.stdout.flush()
     
 # The callback for when a PUBLISH message is received from the server.
@@ -138,19 +91,88 @@ def on_message(client, userdata, msg):
     print(msg.topic+" "+str(msg.payload))
 
     
-def Tare_callback(client, userdata, message):
-    print (datetime.utcnow().strftime('[%Y-%m-%d %H:%M:%S.%f')[:-3]+"]\tClient received Tare request via "+device_root+"/Tare"+" PAYLOAD: "+str(message.payload))
+def Read_callback(client, userdata, message):
+    print (datetime.utcnow().strftime('[%Y-%m-%d %H:%M:%S.%f')[:-3]+"]\tClient received Read Registers request; PAYLOAD: "+str(message.payload))
     sys.stdout.flush()
-    if message.payload == b'1':
-        print (datetime.utcnow().strftime('[%Y-%m-%d %H:%M:%S.%f')[:-3]+"]\tTare request processed!")
-        sys.stdout.flush()
-        FlowMeterDevice.tare()
-        
-def do_disconnect(client, userdata, message):
-    client.disconnect()
-    print (datetime.utcnow().strftime('[%Y-%m-%d %H:%M:%S.%f')[:-3]+"]\tClient received disconnected request via "+device_root+"/Disconnect")
-    sys.stdout.flush()
+    try:
+        request=json.loads((message.payload).decode())
+    except:
+        print(message.payload.decode()+" not recognized as valid json string" )
+        return()
+    try:
+        slaveID=request["slaveID"]
+        startingAddress=request["startingAddress"]
+        noOfPoints=request["noOfPoints"]
+    except:
+        print("Message:\n"+str(message.payload)+"\ndid not contain slaveID, startingAddress, or noOfPoints fields" )
+        print("""Example:\n{\n"  slaveID": 1,\n"  startingAddress": 33,\n  "noOfPoints": 1\n}""") 
+        return
+    try:
+        reply=controller.readRegisters(slaveID, startingAddress, noOfPoints)
+        return reply
+    except:
+        raise
 
+def Write_callback(client, userdata, message):
+    print (datetime.utcnow().strftime('[%Y-%m-%d %H:%M:%S.%f')[:-3]+"]\tClient received Preset Register request; PAYLOAD: "+str(message.payload))
+    sys.stdout.flush()    
+    try:
+        request=json.loads((message.payload).decode())
+    except:
+        print(message.payload.decode()+" not recognized as valid json string" )
+        return()
+    try:
+        slaveID=request["slaveID"]
+        registerAddress=request["registerAddress"]
+        presetData=request["presetData"]
+    except:
+        print("Message:\n"+str(message.payload)+"\ndid not contain slaveID, registerAddress, or presetData fields" )
+        print("""Example:\n{\n"  slaveID": 1,\n"  startingAddress": 33,\n  "presetData": 1\n}""")     
+
+def MaskWrite_callback(client, userdata, message):
+    print (datetime.utcnow().strftime('[%Y-%m-%d %H:%M:%S.%f')[:-3]+"]\tClient received Mask Preset Register request; PAYLOAD: "+str(message.payload))
+    sys.stdout.flush()
+    try:
+        request=json.loads((message.payload).decode())
+    except:
+        print(message.payload.decode()+" not recognized as valid json string" )
+        return()
+    try:
+        slaveID=request["slaveID"]
+        registerAddress=request["registerAddress"]
+        andMask=request["andMask"]
+        orMask=request["orMask"]
+    except:
+        print("Message:\n"+str(message.payload)+"\ndid not contain slaveID, registerAddress, andMask or orMask fields" )
+        print("""Example:\n{\n"  slaveID": 1,\n"  startingAddress": 33,\n  "andMask": 1,\n  "orMask":1024\n}""") 
+
+def Disconnect_callback(client, userdata, message):
+    print (datetime.utcnow().strftime('[%Y-%m-%d %H:%M:%S.%f')[:-3]+"]\tClient received Disconnect request")
+    sys.stdout.flush()
+    client.publish(Topics["Status"], "Offline" )
+    client.disconnect()
+
+def buildTopics(root, name):
+    Topics={}
+    base=root+'/'+name+'/'
+    Topics.update({"Status":base+'/Info/Status'})
+    Topics.update({"Version":base+'/Info/Version'})
+    Topics.update({"Disconnect":base+'/Disconnect'})
+    
+    Topics.update({"Read":base+"ReadRegisters"})
+    Topics.update({"Write":base+"PresetRegister"})
+    Topics.update({"MaskWrite":base+"MaskPresetRegister"})
+    Topics.update({"Reply":root+'/Reply'})
+    Topics.update({"DataStatus":root+'/Data/Status'})
+    return (Topics)
+    
+def closeAll():
+    controller.serviceMode(0)
+    controller.close()
+    client.disconnect()
+    client.loop_stop(force=False)
+    print (datetime.utcnow().strftime('[%Y-%m-%d %H:%M:%S.%f')[:-3]+"]\tProcess stopped")
+    sys.stdout.flush()
 
 
 if __name__ == "__main__":
@@ -183,41 +205,59 @@ if __name__ == "__main__":
     MQTTKeepAlive=conf["MQTT"]["KeepAlive"]
     MQTTRootPath=conf["MQTT"]["rootPath"]
 
-    MOXAIP=conf["Moxa"]["IP"]
-    MOXAPort=conf["Moxa"]["Port"]
-
+    DEVICEIP=conf["Device"]["IP"]
+    DEVICEPort=conf["Device"]["Port"]
+    DEVICESlaveAdderess=conf["Device"]["SlaveAddress"]
+    DEVICEName=conf["Device"]["Name"]
     ScanRate=conf["Settings"]["ScanRate"]
 
 
-    print (datetime.utcnow().strftime('[%Y-%m-%d %H:%M:%S.%f')[:-3]+"]\tFMA1600 MQTT Gateway V 0.0.2")
+    print (datetime.utcnow().strftime('[%Y-%m-%d %H:%M:%S.%f')[:-3]+"]\tMODBUS MQTT Gateway V 0.0.1")
 
     device_root=MQTTRootPath
-    config=communicationConfig(MOXAIP,MOXAPort)
-    FlowMeterDevice=FMA1600(RSOverMoxa,config)
-
+    config=communicationConfig(DEVICEIP,DEVICEPort)
     #FlowMeterDevice=FMA1600(dummy_communication,config)
     username=MQTTUser
     password=MQTTPassword
-
-    client = mqtt.Client(client_id="OMEGAREADER")
+    Topics = buildTopics(device_root, DEVICEName)
+    client = mqtt.Client(client_id=DEVICEName+"_MODBUS_MQTT_GATEWAY")
     client.username_pw_set(username, password=None)
-    client.will_set(device_root+"/Info/Status", payload="Offline", qos=0, retain=True)
+    client.will_set(Topics["Status"], payload="Offline", qos=0, retain=True)
     client.on_connect = on_connect
     client.on_message = on_message
 
-    client.message_callback_add(device_root+"/Tare", Tare_callback)
-    client.message_callback_add(device_root+"/Disconnect", do_disconnect)
+    
 
+    client.message_callback_add(Topics["Read"], Read_callback)
+    client.message_callback_add(Topics["Write"], Write_callback)
+    client.message_callback_add(Topics["MaskWrite"], MaskWrite_callback)
+    client.message_callback_add(Topics["Disconnect"], Disconnect_callback)
 
     try:
         client.connect(MQTTIP, MQTTPort, MQTTKeepAlive)
         print (datetime.utcnow().strftime('[%Y-%m-%d %H:%M:%S.%f')[:-3]+"]\tConnected to MQTT Broker: "+MQTTIP+":",MQTTPort)
     except socket.error as e:
-        print (datetime.utcnow().strftime('[%Y-%m-%d %H:%M:%S.%f')[:-3]+"]\tError while connecting to MQTT broker :: %s" % e)
+        print (datetime.utcnow().strftime('[%Y-%m-%d %H:%M:%S.%f')[:-3]+"]\tError while connecting to MQTT broker : "+MQTTIP+":",MQTTPort,":: %s" % e)
+        closeAll()
+        quit()
 
+    try:
+        controller=ISA010.ISA010(DEVICEIP,DEVICEPort,DEVICESlaveAdderess)
+        print (datetime.utcnow().strftime('[%Y-%m-%d %H:%M:%S.%f')[:-3]+"]\tOpened Connection to ISA010 via ethernet RS484 gateway: "+DEVICEIP+":",DEVICEPort)
+    except:
+        print (datetime.utcnow().strftime('[%Y-%m-%d %H:%M:%S.%f')[:-3]+"]\tError while connecting to ISA010 : "+DEVICEIP+":",DEVICEPort)
+        closeAll()
+        raise
+        quit()
 
-
-
+    try:
+        controller.serviceMode(1)
+        print (datetime.utcnow().strftime('[%Y-%m-%d %H:%M:%S.%f')[:-3]+"]\tController enterd Service Mode")
+    except:
+        print (datetime.utcnow().strftime('[%Y-%m-%d %H:%M:%S.%f')[:-3]+"]\tError while entering ServideMode")
+        closeAll()
+        raise
+        quit()
     # Blocking call that processes network traffic, dispatches callbacks and
     # handles reconnecting.
     # Other loop*() functions are available that give a threaded interface and a
@@ -225,19 +265,10 @@ if __name__ == "__main__":
     client.loop_start()
 
     while True:
-        p, t, mq, P = FlowMeterDevice.poll()
-        pack={"Pressure":{"Value":p,"Unit":"bar"}, "Temperature":{"Value":t, "Unit":"°C"},"Flow":{"Value":mq, "Unit": "nlpm"},"Power":{"Value":P, "Unit": "kW"}}
-        client.publish(device_root+"/Data/All", json.dumps(pack) )
-        client.publish(device_root+"/Data/Pressure", json.dumps(pack["Pressure"]))
-        client.publish(device_root+"/Data/Temperature", json.dumps(pack["Temperature"]))
-        client.publish(device_root+"/Data/Flow", json.dumps(pack["Flow"]))
-        y=client.publish(device_root+"/Data/Power", json.dumps(pack["Power"]))
+        status=controller.readStatus()
+        y=client.publish(Topics["DataStatus"], json.dumps(status))
         if y[0] == 4:
             break
         time.sleep(ScanRate)
-        
-    client.disconnect()
-    client.loop_stop(force=False)
-    FlowMeterDevice.stop()
-    print (datetime.utcnow().strftime('[%Y-%m-%d %H:%M:%S.%f')[:-3]+"]\tProcess stopped")
-    sys.stdout.flush()
+ 
+    closeAll()

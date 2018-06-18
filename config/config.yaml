@@ -6,8 +6,8 @@ MQTT:
   Password: ""
   rootPath: "WIATA"
 Device:
-  IP: "192.168.20.120"
-  Port: 4002
+  IP: "192.168.20.118"
+  Port: 4001
   SlaveAddress: 1
   Name: "ISA010"
 Settings:
