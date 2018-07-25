@@ -295,8 +295,10 @@ if __name__ == "__main__":
 
     while True:
         status=controller.readStatus()
-        y=client.publish(Topics["DataStatus"], json.dumps(status))
-        if y[0] == 4:
+        (rc, mid)=client.publish(Topics["DataStatus"], json.dumps(status))
+        print("RC:"+rc)
+        print("mid:"+mid)
+        if rc == 4:
             break
         time.sleep(ScanRate)
  
