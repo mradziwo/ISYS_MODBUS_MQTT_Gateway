@@ -156,7 +156,7 @@ def MaskWrite_callback(client, userdata, message):
 def Disconnect_callback(client, userdata, message):
     print (datetime.utcnow().strftime('[%Y-%m-%d %H:%M:%S.%f')[:-3]+"]\tClient received Disconnect request")
     sys.stdout.flush()
-    client.publish(Topics["Status"], "Offline" )
+    client.publish(Topics["Status"], "Offline" , retain=True)
     client.disconnect()
 
 def PWM_callback(client, userdata, message):
@@ -191,12 +191,17 @@ def buildTopics(root, name):
     return (Topics)
     
 def closeAll():
-    controller.serviceMode(0)
-    controller.close()
-    client.disconnect()
-    client.loop_stop(force=False)
     print (datetime.utcnow().strftime('[%Y-%m-%d %H:%M:%S.%f')[:-3]+"]\tProcess stopped")
     sys.stdout.flush()
+    controller.serviceMode(0)
+    try:
+        controller.close()
+    except:
+        print("Unexpected error:", sys.exc_info()[0])
+        raise
+    client.disconnect()
+    client.loop_stop(force=True)
+
 
 
 controller=[]

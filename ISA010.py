@@ -105,6 +105,7 @@ class ISA010( modbus.GatewayInstrument ):
         return reply
 
     def close(self):
+        self.serviceMode(1)
         self.setDKG(0)
         self.setKasAwar(0)
         self.setPWM(0)

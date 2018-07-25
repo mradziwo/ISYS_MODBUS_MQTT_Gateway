@@ -11,4 +11,4 @@ Device:
   SlaveAddress: 1
   Name: "ISA010"
 Settings:
-  ScanRate: 5
+  ScanRate: 1
