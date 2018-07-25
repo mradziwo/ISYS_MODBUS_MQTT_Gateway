@@ -297,7 +297,7 @@ if __name__ == "__main__":
         status=controller.readStatus()
         (rc, mid)=client.publish(Topics["DataStatus"], json.dumps(status))
         print("RC:"+str(rc))
-        print("mid:"+str(mid)
+        print("mid:"+str(mid))
         if rc == 4:
             break
         time.sleep(ScanRate)
