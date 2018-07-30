@@ -300,7 +300,7 @@ if __name__ == "__main__":
 
     while True:
         status=controller.readStatus()
-        (rc, mid)=client.publish(Topics["DataStatus"], json.dumps(status))
+        (rc, mid)=client.publish(Topics["DataStatus"], json.dumps(status),qos=2)
         print("RC:"+str(rc))
         print("mid:"+str(mid))
         if rc == 4:
