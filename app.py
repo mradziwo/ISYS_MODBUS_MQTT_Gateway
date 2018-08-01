@@ -9,7 +9,7 @@ import sys
 import threading
 import ISA010
 
-_version="0.0.1"
+_version="0.0.3"
 
 class communication:
     
