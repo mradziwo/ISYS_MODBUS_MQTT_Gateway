@@ -270,7 +270,7 @@ if __name__ == "__main__":
     ScanRate=conf["Settings"]["ScanRate"]
 
 
-    print (datetime.utcnow().strftime('[%Y-%m-%d %H:%M:%S.%f')[:-3]+"]\tMODBUS MQTT Gateway V 0.0.1")
+    print (datetime.utcnow().strftime('[%Y-%m-%d %H:%M:%S.%f')[:-3]+"]\tMODBUS MQTT Gateway V"+str(_version))
 
     device_root=MQTTRootPath
     config=communicationConfig(DEVICEIP,DEVICEPort)
