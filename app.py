@@ -156,23 +156,50 @@ def MaskWrite_callback(client, userdata, message):
 def Disconnect_callback(client, userdata, message):
     print (datetime.utcnow().strftime('[%Y-%m-%d %H:%M:%S.%f')[:-3]+"]\tClient received Disconnect request")
     sys.stdout.flush()
-    client.publish(Topics["Status"], "Offline" , retain=True)
-    client.disconnect()
+    try:
+        client.publish(Topics["Status"], "Offline" , retain=True)
+    except Exception as e: print(e)
+    try:
+        client.disconnect()
+    except Exception as e: print(e)
 
 def PWM_callback(client, userdata, message):
-    controller.setPWM(int(message.payload))
-    status=controller.readStatus()
-    client.publish(Topics["DataStatus"], json.dumps(status))
+    try:
+        controller.setPWM(int(message.payload))
+    except Exception as e: print(e)
+    try:
+        status=controller.readStatus()
+    except Exception as e: print(e)
+    try:
+        client.publish(Topics["DataStatus"], json.dumps(status))
+    except Exception as e: print(e)
 
 def DKG_callback(client, userdata, message):
-    controller.setDKG(int(message.payload))
-    status=controller.readStatus()
-    client.publish(Topics["DataStatus"], json.dumps(status))
+    try:
+        controller.setDKG(int(message.payload))
+    except Exception as e: print(e)
+    try:
+        status=controller.readStatus()
+    except Exception as e: print(e)
+    try:
+        client.publish(Topics["DataStatus"], json.dumps(status))
+    except Exception as e: print(e)
+
+        
 
 def KasAwar_callback(client, userdata, message):
-    controller.setKasAwar(int(message.payload))
-    status=controller.readStatus()
-    client.publish(Topics["DataStatus"], json.dumps(status))
+
+    try:
+        controller.setKasAwar(int(message.payload))
+    except Exception as e: print(e)
+    try:
+        status=controller.readStatus()
+    except Exception as e: print(e)
+    try:
+        client.publish(Topics["DataStatus"], json.dumps(status))
+    except Exception as e: print(e)
+
+        
 
 def buildTopics(root, name):
     Topics={}
@@ -301,8 +328,9 @@ if __name__ == "__main__":
     while True:
         status=controller.readStatus()
         (rc, mid)=client.publish(Topics["DataStatus"], json.dumps(status),qos=2)
-        print("RC:"+str(rc))
-        print("mid:"+str(mid))
+        if rc != 0:
+            print("RC:"+str(rc))
+            print("mid:"+str(mid))
         if rc == 4:
             break
         time.sleep(ScanRate)

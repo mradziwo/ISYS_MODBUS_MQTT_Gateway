@@ -17,7 +17,9 @@ class ISA010( modbus.GatewayInstrument ):
         
     def readStatus(self):
         with self.mutex:
-            reply=self.read_registers(2,15)
+            try:
+                reply=self.read_registers(2,15)
+            except Exception as e: print(e)
         status={}
         status.update({"Uin":reply[2]/10.})
         status.update({"PWM":reply[3]})
@@ -55,9 +57,11 @@ class ISA010( modbus.GatewayInstrument ):
 
     def setPWM(self, PWM):
         with self.mutex:
+            print ("PWM set to:", str(PWM))
             return self.write_register(5, PWM, functioncode=6)
     
     def setKasAwar(self, value):
+        print ("KasAwar set to:", str(value))
         if value == 1:
             orMask=0x02
         else:
